@@ -10,6 +10,12 @@ export type Scene =
 
 export type Recipient = "boss" | "colleague" | "client" | "customer";
 export type Tone = "formal" | "standard" | "casual";
+export type Language = "ja" | "en";
+
+export const LANGUAGES: { id: Language; label: string; description: string }[] = [
+  { id: "ja", label: "日本語", description: "日本語ビジネスメール" },
+  { id: "en", label: "English", description: "英語ビジネスメール" },
+];
 
 export const SCENES: { id: Scene; label: string; icon: string; description: string }[] = [
   { id: "thanks", label: "お礼", icon: "🙏", description: "感謝を伝えるメール" },
@@ -75,10 +81,54 @@ export function buildPrompt(
   recipient: Recipient,
   tone: Tone,
   keyPoints: string,
-  userProfile?: UserProfileInfo | null
+  userProfile?: UserProfileInfo | null,
+  language: Language = "ja"
 ): string {
   const hasProfile = userProfile && (userProfile.displayName || userProfile.companyName);
 
+  if (language === "en") {
+    const SCENE_LABELS_EN: Record<Scene, string> = {
+      thanks: "Thank you", request: "Request", apology: "Apology",
+      reminder: "Follow-up/Reminder", report: "Report", decline: "Decline",
+      greeting: "Greeting/Introduction", inquiry: "Inquiry",
+    };
+    const RECIPIENT_LABELS_EN: Record<Recipient, string> = {
+      boss: "Superior/Manager", colleague: "Colleague", client: "Business partner", customer: "Customer",
+    };
+    const TONE_LABELS_EN: Record<Tone, string> = {
+      formal: "Very formal and professional", standard: "Standard business tone", casual: "Semi-casual, friendly but professional",
+    };
+
+    const profileSectionEN = hasProfile
+      ? `\n## Sender Info\n- Name: ${userProfile.displayName || "[Your Name]"}\n- Company: ${userProfile.companyName || ""}\n- Department: ${userProfile.department || ""}\n- Title: ${userProfile.position || ""}`
+      : "";
+
+    return `You are an expert in writing professional business emails in English. Create a business email based on the following conditions.
+
+## Conditions
+- Scene: ${SCENE_LABELS_EN[scene]}
+- Recipient: ${RECIPIENT_LABELS_EN[recipient]}
+- Tone: ${TONE_LABELS_EN[tone]}
+- Key points: ${keyPoints}
+${profileSectionEN}
+
+## Output format
+Output ONLY the following JSON format. No other text.
+{
+  "subject": "Subject line here",
+  "body": "Email body here"
+}
+
+## Rules
+- Keep subject line concise (under 10 words)
+- Use appropriate line breaks
+- Use "[Recipient's Name]" as placeholder for the recipient's name
+- Use "${hasProfile && userProfile.displayName ? userProfile.displayName : "[Your Name]"}" as the sender's name
+- Write a natural, professional business email
+- Output ONLY JSON`;
+  }
+
+  // Japanese prompt (original)
   const profileSection = hasProfile
     ? `
 ## 送信者情報

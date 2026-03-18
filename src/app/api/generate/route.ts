@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildPrompt, getMockResponse } from "@/lib/prompts";
 import { generateEmail } from "@/lib/openai";
-import type { Scene, Recipient, Tone, UserProfileInfo } from "@/lib/prompts";
+import type { Scene, Recipient, Tone, Language, UserProfileInfo } from "@/lib/prompts";
 
 // Simple in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -37,12 +37,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { scene, recipient, tone, keyPoints, userProfile } = body as {
+    const { scene, recipient, tone, keyPoints, userProfile, language } = body as {
       scene: Scene;
       recipient: Recipient;
       tone: Tone;
       keyPoints: string;
       userProfile?: UserProfileInfo | null;
+      language?: Language;
     };
 
     if (!scene || !recipient || !tone || !keyPoints) {
@@ -52,7 +53,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = buildPrompt(scene, recipient, tone, keyPoints, userProfile);
+    const lang = language || "ja";
+    const prompt = buildPrompt(scene, recipient, tone, keyPoints, userProfile, lang);
 
     let result: { subject: string; body: string };
 
@@ -60,18 +62,9 @@ export async function POST(request: NextRequest) {
       result = await generateEmail(prompt);
     } catch (error: unknown) {
       if (error instanceof Error && error.message === "MOCK_MODE") {
-        // APIキー未設定の場合はモックレスポンスを返す
         result = getMockResponse(scene, recipient, tone);
-        // モックでもプロフィール情報を反映
         if (userProfile?.displayName) {
           result.body = result.body.replace(/\[あなたの名前\]/g, userProfile.displayName);
-        }
-        if (userProfile?.signature) {
-          const lastNamePlaceholder = userProfile.displayName || "[あなたの名前]";
-          result.body = result.body.replace(
-            new RegExp(`\n\n${lastNamePlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
-            `\n\n${userProfile.signature}`
-          );
         }
       } else {
         throw error;
@@ -81,6 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       subject: result.subject,
       body: result.body,
+      language: lang,
       isMock: !process.env.OPENAI_API_KEY,
     });
   } catch (error) {

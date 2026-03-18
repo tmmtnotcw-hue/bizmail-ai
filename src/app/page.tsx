@@ -9,14 +9,17 @@ import Footer from "@/components/Footer";
 import AuthModal from "@/components/AuthModal";
 import ProfileSettings from "@/components/ProfileSettings";
 import TemplateManager from "@/components/TemplateManager";
+import HistoryPanel from "@/components/HistoryPanel";
 import { createClient } from "@/lib/supabase";
-import type { Scene, Recipient, Tone } from "@/lib/prompts";
+import { LANGUAGES } from "@/lib/prompts";
+import type { Scene, Recipient, Tone, Language } from "@/lib/prompts";
 import type { SavedTemplate, UserProfile } from "@/lib/supabase";
 
 export default function Home() {
   const [scene, setScene] = useState<Scene | null>(null);
   const [recipient, setRecipient] = useState<Recipient>("client");
   const [tone, setTone] = useState<Tone>("standard");
+  const [language, setLanguage] = useState<Language>("ja");
   const [keyPoints, setKeyPoints] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<{
@@ -31,6 +34,7 @@ export default function Home() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const loadUserProfile = useCallback(async () => {
@@ -54,7 +58,6 @@ export default function Home() {
 
     if (data) {
       setUserProfile(data);
-      // Apply defaults from profile
       if (data.default_tone) setTone(data.default_tone as Tone);
       if (data.default_recipient) setRecipient(data.default_recipient as Recipient);
     }
@@ -73,6 +76,28 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, [loadUserProfile]);
 
+  // Save to history
+  const saveToHistory = async (subject: string, body: string) => {
+    if (!isLoggedIn || !scene) return;
+
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from("generation_history").insert({
+      user_id: user.id,
+      scene,
+      recipient,
+      tone,
+      language,
+      key_points: keyPoints,
+      subject,
+      body,
+    });
+  };
+
   const handleGenerate = async () => {
     if (!scene || !keyPoints.trim()) return;
 
@@ -88,7 +113,7 @@ export default function Home() {
           recipient,
           tone,
           keyPoints,
-          // Pass user profile info for personalized generation
+          language,
           userProfile: userProfile ? {
             displayName: userProfile.display_name,
             companyName: userProfile.company_name,
@@ -107,6 +132,9 @@ export default function Home() {
       }
 
       setResult(data);
+
+      // Auto-save to history
+      await saveToHistory(data.subject, data.body);
     } catch {
       setError("通信エラーが発生しました。もう一度お試しください。");
     } finally {
@@ -156,12 +184,33 @@ export default function Home() {
     });
   };
 
+  // Gmail draft link
+  const openGmailDraft = () => {
+    if (!result) return;
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(result.body)}`;
+    window.open(gmailUrl, "_blank");
+  };
+
+  // Reuse from history
+  const handleReuseHistory = (item: { scene: string; recipient: string; tone: string; key_points: string; subject: string; body: string }) => {
+    setScene(item.scene as Scene);
+    setRecipient(item.recipient as Recipient);
+    setTone(item.tone as Tone);
+    setKeyPoints(item.key_points);
+    setResult({
+      subject: item.subject,
+      body: item.body,
+      isMock: false,
+    });
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
       <Header
         onLoginClick={() => setShowAuthModal(true)}
         onProfileClick={() => setShowProfileSettings(true)}
         onTemplatesClick={() => setShowTemplateManager(true)}
+        onHistoryClick={() => setShowHistory(true)}
       />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
@@ -180,13 +229,21 @@ export default function Home() {
               <button onClick={() => setShowAuthModal(true)} className="text-blue-600 hover:underline dark:text-blue-400">
                 ログイン
               </button>
-              するとテンプレート保存やプロフィール設定が使えます
+              するとテンプレート保存や生成履歴が使えます
             </p>
           )}
           {isLoggedIn && userProfile?.display_name && (
-            <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
-              👋 {userProfile.display_name}さん、こんにちは！
-            </p>
+            <div className="mt-2">
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                👋 {userProfile.display_name}さん、こんにちは！
+              </p>
+              <button
+                onClick={() => setShowHistory(true)}
+                className="mt-1 text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+              >
+                📜 生成履歴を見る
+              </button>
+            </div>
           )}
         </div>
 
@@ -196,17 +253,42 @@ export default function Home() {
 
           {/* Step 2: フォーム（シーン選択後に表示） */}
           {scene && (
-            <EmailForm
-              recipient={recipient}
-              tone={tone}
-              keyPoints={keyPoints}
-              onRecipientChange={setRecipient}
-              onToneChange={setTone}
-              onKeyPointsChange={setKeyPoints}
-              onSubmit={handleGenerate}
-              isLoading={isLoading}
-              disabled={!scene}
-            />
+            <>
+              {/* 言語切替 */}
+              <div>
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
+                  言語
+                </h2>
+                <div className="flex gap-2">
+                  {LANGUAGES.map((lang) => (
+                    <button
+                      key={lang.id}
+                      onClick={() => setLanguage(lang.id)}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                        language === lang.id
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {lang.label}
+                      <span className="ml-1 text-xs opacity-75">({lang.description})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <EmailForm
+                recipient={recipient}
+                tone={tone}
+                keyPoints={keyPoints}
+                onRecipientChange={setRecipient}
+                onToneChange={setTone}
+                onKeyPointsChange={setKeyPoints}
+                onSubmit={handleGenerate}
+                isLoading={isLoading}
+                disabled={!scene}
+              />
+            </>
           )}
 
           {/* エラー表示 */}
@@ -224,6 +306,7 @@ export default function Home() {
               isMock={result.isMock}
               onRegenerate={handleGenerate}
               onSaveTemplate={handleSaveTemplate}
+              onOpenGmail={openGmailDraft}
               isLoading={isLoading}
               isLoggedIn={isLoggedIn}
             />
@@ -248,6 +331,11 @@ export default function Home() {
         isOpen={showTemplateManager}
         onClose={() => setShowTemplateManager(false)}
         onUseTemplate={handleUseTemplate}
+      />
+      <HistoryPanel
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onReuse={handleReuseHistory}
       />
     </div>
   );

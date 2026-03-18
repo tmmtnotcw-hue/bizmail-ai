@@ -8,6 +8,7 @@ interface EmailResultProps {
   isMock: boolean;
   onRegenerate: () => void;
   onSaveTemplate?: () => void;
+  onOpenGmail?: () => void;
   isLoading: boolean;
   isLoggedIn: boolean;
 }
@@ -18,6 +19,7 @@ export default function EmailResult({
   isMock,
   onRegenerate,
   onSaveTemplate,
+  onOpenGmail,
   isLoading,
   isLoggedIn,
 }: EmailResultProps) {
@@ -113,6 +115,14 @@ export default function EmailResult({
         >
           🔄 別バージョンを生成
         </button>
+        {onOpenGmail && (
+          <button
+            onClick={onOpenGmail}
+            className="flex items-center gap-2 rounded-xl border border-red-300 bg-white px-5 py-2.5 text-sm font-medium text-red-600 transition-all hover:bg-red-50 dark:border-red-700 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            ✉️ Gmailで開く
+          </button>
+        )}
         {isLoggedIn && onSaveTemplate && (
           <button
             onClick={onSaveTemplate}

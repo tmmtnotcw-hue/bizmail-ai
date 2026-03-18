@@ -8,9 +8,10 @@ interface HeaderProps {
   onLoginClick: () => void;
   onProfileClick: () => void;
   onTemplatesClick: () => void;
+  onHistoryClick?: () => void;
 }
 
-export default function Header({ onLoginClick, onProfileClick, onTemplatesClick }: HeaderProps) {
+export default function Header({ onLoginClick, onProfileClick, onTemplatesClick, onHistoryClick }: HeaderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -82,6 +83,14 @@ export default function Header({ onLoginClick, onProfileClick, onTemplatesClick 
                   >
                     📁 テンプレート一覧
                   </button>
+                  {onHistoryClick && (
+                    <button
+                      onClick={() => { onHistoryClick(); setMenuOpen(false); }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    >
+                      📜 生成履歴
+                    </button>
+                  )}
                   <hr className="my-1 border-gray-200 dark:border-gray-700" />
                   <button
                     onClick={handleLogout}
