@@ -90,16 +90,9 @@ function renderContent(content: string) {
       }
     } else {
       flushList();
-      // Handle inline bold (**text**)
-      const parts = trimmed.split(/(\*\*[^*]+\*\*)/);
       elements.push(
         <p key={i} className="mb-4 leading-relaxed text-gray-700 dark:text-gray-300">
-          {parts.map((part, j) => {
-            if (part.startsWith("**") && part.endsWith("**")) {
-              return <strong key={j} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>;
-            }
-            return part;
-          })}
+          {trimmed}
         </p>
       );
     }
