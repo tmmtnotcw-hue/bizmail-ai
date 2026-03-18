@@ -215,25 +215,24 @@ export default function Home() {
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         {/* Hero */}
-        <div className="mb-10 text-center">
-          <h2 className="mb-3 text-3xl font-bold text-gray-900 dark:text-white sm:text-4xl">
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-block rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+            完全無料 ・ 登録なしで使える
+          </div>
+          <h2 className="mb-4 text-3xl font-bold leading-tight text-gray-900 dark:text-white sm:text-5xl">
             ビジネスメールを
+            <br className="sm:hidden" />
             <span className="text-blue-600 dark:text-blue-400">AI</span>
-            が瞬時に作成
+            が<span className="underline decoration-blue-400 decoration-4 underline-offset-4">10秒</span>で作成
           </h2>
-          <p className="text-base text-gray-600 dark:text-gray-400">
-            シーンを選んで要点を入力するだけ。敬語も定型表現もおまかせ。
+          <p className="mx-auto max-w-xl text-lg text-gray-600 dark:text-gray-400">
+            シーンを選んで要点を入力するだけ。
+            <br className="hidden sm:block" />
+            敬語・定型表現・署名まで、プロ品質のメールが瞬時に完成。
           </p>
-          {!isLoggedIn && (
-            <p className="mt-2 text-sm text-gray-400 dark:text-gray-500">
-              <button onClick={() => setShowAuthModal(true)} className="text-blue-600 hover:underline dark:text-blue-400">
-                ログイン
-              </button>
-              するとテンプレート保存や生成履歴が使えます
-            </p>
-          )}
-          {isLoggedIn && userProfile?.display_name && (
-            <div className="mt-2">
+
+          {isLoggedIn && userProfile?.display_name ? (
+            <div className="mt-4">
               <p className="text-sm text-blue-600 dark:text-blue-400">
                 👋 {userProfile.display_name}さん、こんにちは！
               </p>
@@ -244,7 +243,30 @@ export default function Home() {
                 📜 生成履歴を見る
               </button>
             </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500">
+              <button onClick={() => setShowAuthModal(true)} className="text-blue-600 hover:underline dark:text-blue-400">
+                無料アカウント作成
+              </button>
+              でテンプレート保存・生成履歴・プロフィール設定が使えます
+            </p>
           )}
+        </div>
+
+        {/* Stats */}
+        <div className="mb-10 grid grid-cols-3 gap-4 rounded-2xl bg-gray-50 p-6 dark:bg-gray-900">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">8</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">対応シーン</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">2</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">対応言語</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">10秒</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">で完成</p>
+          </div>
         </div>
 
         <div className="space-y-8">
@@ -311,6 +333,85 @@ export default function Home() {
               isLoggedIn={isLoggedIn}
             />
           )}
+        </div>
+
+        {/* Features Section */}
+        <div className="mt-16 mb-8">
+          <h2 className="mb-8 text-center text-2xl font-bold text-gray-900 dark:text-white">
+            BizMail AI が選ばれる理由
+          </h2>
+          <div className="grid gap-6 sm:grid-cols-3">
+            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
+              <div className="mb-3 text-3xl">🎯</div>
+              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">適切な敬語</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                送信先に合わせた敬語レベルを自動調整。上司、取引先、顧客それぞれに最適な表現を使用。
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
+              <div className="mb-3 text-3xl">⚡</div>
+              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">10秒で完成</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                要点を箇条書きで入力するだけ。件名も本文もAIが瞬時に生成。メール作成の時間を90%削減。
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
+              <div className="mb-3 text-3xl">🌐</div>
+              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">日英対応</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                日本語・英語のビジネスメールに対応。海外とのやり取りもワンクリックで切り替え。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* How it works */}
+        <div className="mb-8 rounded-2xl bg-blue-50 p-8 dark:bg-blue-950/20">
+          <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
+            使い方は3ステップ
+          </h2>
+          <div className="grid gap-6 sm:grid-cols-3">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">1</div>
+              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">シーンを選ぶ</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">お礼・依頼・お詫びなど8つのシーンから選択</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">2</div>
+              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">要点を入力</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">伝えたいポイントを箇条書きでOK</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">3</div>
+              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">コピー＆送信</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">生成されたメールをコピーまたはGmailで直接開く</p>
+            </div>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="mb-8">
+          <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
+            よくある質問
+          </h2>
+          <div className="space-y-4">
+            {[
+              { q: "本当に無料で使えますか？", a: "はい、完全無料です。アカウント登録なしでもメール生成が可能です。アカウントを作成すると、テンプレート保存や生成履歴などの追加機能が使えます。" },
+              { q: "生成されたメールの品質は大丈夫ですか？", a: "最新のAI（GPT-4o-mini）を使用しており、ビジネスメールとして適切な敬語表現と構成で生成されます。送信前に内容をご確認いただくことをお勧めします。" },
+              { q: "入力した内容は保存されますか？", a: "ログインしていない場合、入力内容はサーバーに保存されません。ログインユーザーのみ、生成履歴が保存されます（いつでも削除可能）。" },
+              { q: "英語メールも作れますか？", a: "はい、日本語と英語の両方に対応しています。言語切替ボタンで簡単に切り替えられます。日本語で要点を入力しても、自然な英語メールが生成されます。" },
+            ].map((faq, i) => (
+              <details key={i} className="group rounded-xl border border-gray-200 dark:border-gray-800">
+                <summary className="flex cursor-pointer items-center justify-between p-4 font-medium text-gray-900 dark:text-white">
+                  {faq.q}
+                  <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
+                </summary>
+                <p className="border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+                  {faq.a}
+                </p>
+              </details>
+            ))}
+          </div>
         </div>
       </main>
 
