@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="border-t border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
@@ -39,6 +41,19 @@ export default function Footer() {
               </ul>
             </div>
           </div>
+        </div>
+
+        {/* ブログリンク */}
+        <div className="mb-6 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/20">
+          <h3 className="mb-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+            📝 ビジネスメールの書き方ブログ
+          </h3>
+          <p className="mb-2 text-xs text-gray-600 dark:text-gray-400">
+            お礼・依頼・お詫びなど、シーン別のメール例文と書き方のコツを解説しています。
+          </p>
+          <Link href="/blog" className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+            記事一覧を見る →
+          </Link>
         </div>
 
         {/* コピーライト */}
