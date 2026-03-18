@@ -1,443 +1,222 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
-import Header from "@/components/Header";
-import SceneSelector from "@/components/SceneSelector";
-import EmailForm from "@/components/EmailForm";
-import EmailResult from "@/components/EmailResult";
+import Link from "next/link";
 import Footer from "@/components/Footer";
-import AuthModal from "@/components/AuthModal";
-import ProfileSettings from "@/components/ProfileSettings";
-import TemplateManager from "@/components/TemplateManager";
-import HistoryPanel from "@/components/HistoryPanel";
-import { createClient } from "@/lib/supabase";
-import { LANGUAGES } from "@/lib/prompts";
-import type { Scene, Recipient, Tone, Language } from "@/lib/prompts";
-import type { SavedTemplate, UserProfile } from "@/lib/supabase";
 
-export default function Home() {
-  const [scene, setScene] = useState<Scene | null>(null);
-  const [recipient, setRecipient] = useState<Recipient>("client");
-  const [tone, setTone] = useState<Tone>("standard");
-  const [language, setLanguage] = useState<Language>("ja");
-  const [keyPoints, setKeyPoints] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{
-    subject: string;
-    body: string;
-    isMock: boolean;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Auth & user state
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showProfileSettings, setShowProfileSettings] = useState(false);
-  const [showTemplateManager, setShowTemplateManager] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  const loadUserProfile = useCallback(async () => {
-    const supabase = createClient();
-    if (!supabase) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setIsLoggedIn(false);
-      setUserProfile(null);
-      return;
-    }
-
-    setIsLoggedIn(true);
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    if (data) {
-      setUserProfile(data);
-      if (data.default_tone) setTone(data.default_tone as Tone);
-      if (data.default_recipient) setRecipient(data.default_recipient as Recipient);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadUserProfile();
-
-    const supabase = createClient();
-    if (!supabase) return;
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      loadUserProfile();
-    });
-
-    return () => subscription.unsubscribe();
-  }, [loadUserProfile]);
-
-  // Save to history
-  const saveToHistory = async (subject: string, body: string) => {
-    if (!isLoggedIn || !scene) return;
-
-    const supabase = createClient();
-    if (!supabase) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase.from("generation_history").insert({
-      user_id: user.id,
-      scene,
-      recipient,
-      tone,
-      language,
-      key_points: keyPoints,
-      subject,
-      body,
-    });
-  };
-
-  const handleGenerate = async () => {
-    if (!scene || !keyPoints.trim()) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scene,
-          recipient,
-          tone,
-          keyPoints,
-          language,
-          userProfile: userProfile ? {
-            displayName: userProfile.display_name,
-            companyName: userProfile.company_name,
-            department: userProfile.department,
-            position: userProfile.position,
-            signature: userProfile.signature,
-          } : null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "エラーが発生しました");
-        return;
-      }
-
-      setResult(data);
-
-      // Auto-save to history
-      await saveToHistory(data.subject, data.body);
-    } catch {
-      setError("通信エラーが発生しました。もう一度お試しください。");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSaveTemplate = async () => {
-    if (!result || !scene) return;
-
-    const supabase = createClient();
-    if (!supabase) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const templateName = prompt("テンプレート名を入力してください：");
-    if (!templateName) return;
-
-    const { error: saveError } = await supabase.from("saved_templates").insert({
-      user_id: user.id,
-      name: templateName,
-      scene,
-      recipient,
-      tone,
-      key_points: keyPoints,
-      subject: result.subject,
-      body: result.body,
-    });
-
-    if (saveError) {
-      setError("テンプレートの保存に失敗しました");
-    } else {
-      alert("テンプレートを保存しました！");
-    }
-  };
-
-  const handleUseTemplate = (template: SavedTemplate) => {
-    setScene(template.scene as Scene);
-    setRecipient(template.recipient as Recipient);
-    setTone(template.tone as Tone);
-    setKeyPoints(template.key_points);
-    setResult({
-      subject: template.subject,
-      body: template.body,
-      isMock: false,
-    });
-  };
-
-  // Gmail draft link
-  const openGmailDraft = () => {
-    if (!result) return;
-    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(result.body)}`;
-    window.open(gmailUrl, "_blank");
-  };
-
-  // Reuse from history
-  const handleReuseHistory = (item: { scene: string; recipient: string; tone: string; key_points: string; subject: string; body: string }) => {
-    setScene(item.scene as Scene);
-    setRecipient(item.recipient as Recipient);
-    setTone(item.tone as Tone);
-    setKeyPoints(item.key_points);
-    setResult({
-      subject: item.subject,
-      body: item.body,
-      isMock: false,
-    });
-  };
-
+export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
-      <Header
-        onLoginClick={() => setShowAuthModal(true)}
-        onProfileClick={() => setShowProfileSettings(true)}
-        onTemplatesClick={() => setShowTemplateManager(true)}
-        onHistoryClick={() => setShowHistory(true)}
-      />
-
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
-        {/* Hero */}
-        <div className="mb-8 text-center">
-          <div className="mb-4 inline-block rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-            完全無料 ・ 登録なしで使える
-          </div>
-          <h2 className="mb-4 text-3xl font-bold leading-tight text-gray-900 dark:text-white sm:text-5xl">
-            ビジネスメールを
-            <br className="sm:hidden" />
-            <span className="text-blue-600 dark:text-blue-400">AI</span>
-            が<span className="underline decoration-blue-400 decoration-4 underline-offset-4">10秒</span>で作成
-          </h2>
-          <p className="mx-auto max-w-xl text-lg text-gray-600 dark:text-gray-400">
-            シーンを選んで要点を入力するだけ。
-            <br className="hidden sm:block" />
-            敬語・定型表現・署名まで、プロ品質のメールが瞬時に完成。
-          </p>
-
-          {isLoggedIn && userProfile?.display_name ? (
-            <div className="mt-4">
-              <p className="text-sm text-blue-600 dark:text-blue-400">
-                👋 {userProfile.display_name}さん、こんにちは！
-              </p>
-              <button
-                onClick={() => setShowHistory(true)}
-                className="mt-1 text-xs text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
-              >
-                📜 生成履歴を見る
-              </button>
+      {/* Header */}
+      <header className="w-full border-b border-gray-200 bg-white/80 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/80">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-xl text-white shadow-md">
+              ✉️
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-gray-400 dark:text-gray-500">
-              <button onClick={() => setShowAuthModal(true)} className="text-blue-600 hover:underline dark:text-blue-400">
-                無料アカウント作成
-              </button>
-              でテンプレート保存・生成履歴・プロフィール設定が使えます
-            </p>
-          )}
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">BizMail AI</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">AIビジネスメール作成支援</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/blog" className="hidden text-sm text-gray-600 hover:text-blue-600 sm:block dark:text-gray-400">
+              ブログ
+            </Link>
+            <Link
+              href="/app"
+              className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl"
+            >
+              今すぐ使う
+            </Link>
+          </div>
         </div>
+      </header>
+
+      <main>
+        {/* Hero */}
+        <section className="relative overflow-hidden px-4 py-20 text-center sm:py-28">
+          <div className="absolute inset-0 -z-10 bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-gray-950" />
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-6 inline-block rounded-full bg-blue-100 px-4 py-1.5 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+              完全無料 ・ 登録なしで使える
+            </div>
+            <h2 className="mb-6 text-4xl font-bold leading-tight text-gray-900 dark:text-white sm:text-6xl">
+              ビジネスメールを
+              <br />
+              <span className="text-blue-600 dark:text-blue-400">AI</span>
+              が<span className="underline decoration-blue-400 decoration-4 underline-offset-8">10秒</span>で作成
+            </h2>
+            <p className="mx-auto mb-8 max-w-xl text-lg text-gray-600 dark:text-gray-400">
+              シーンを選んで要点を入力するだけ。
+              敬語・定型表現・署名まで、プロ品質のメールが瞬時に完成します。
+            </p>
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <Link
+                href="/app"
+                className="w-full rounded-xl bg-blue-600 px-8 py-4 text-lg font-bold text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl sm:w-auto"
+              >
+                ✨ 無料でメールを作成する
+              </Link>
+              <Link
+                href="/blog"
+                className="w-full rounded-xl border border-gray-300 px-8 py-4 text-lg font-medium text-gray-700 transition-all hover:bg-gray-50 sm:w-auto dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+              >
+                📝 例文を見る
+              </Link>
+            </div>
+          </div>
+        </section>
 
         {/* Stats */}
-        <div className="mb-10 grid grid-cols-3 gap-4 rounded-2xl bg-gray-50 p-6 dark:bg-gray-900">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">8</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">対応シーン</p>
+        <section className="border-y border-gray-200 bg-gray-50 px-4 py-10 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto grid max-w-3xl grid-cols-3 gap-8">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">8</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">対応シーン</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">2</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">対応言語</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">10秒</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">で完成</p>
+            </div>
           </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">2</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">対応言語</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">10秒</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">で完成</p>
-          </div>
-        </div>
+        </section>
 
-        <div className="space-y-8">
-          {/* Step 1: シーン選択 */}
-          <SceneSelector selected={scene} onSelect={setScene} />
-
-          {/* Step 2: フォーム（シーン選択後に表示） */}
-          {scene && (
-            <>
-              {/* 言語切替 */}
-              <div>
-                <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-white">
-                  言語
-                </h2>
-                <div className="flex gap-2">
-                  {LANGUAGES.map((lang) => (
-                    <button
-                      key={lang.id}
-                      onClick={() => setLanguage(lang.id)}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                        language === lang.id
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                      }`}
-                    >
-                      {lang.label}
-                      <span className="ml-1 text-xs opacity-75">({lang.description})</span>
-                    </button>
-                  ))}
+        {/* Features */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="mb-4 text-center text-3xl font-bold text-gray-900 dark:text-white">
+              BizMail AI が選ばれる理由
+            </h2>
+            <p className="mb-12 text-center text-gray-500 dark:text-gray-400">
+              メール作成の悩みを全て解決します
+            </p>
+            <div className="grid gap-8 sm:grid-cols-3">
+              {[
+                { icon: "🎯", title: "適切な敬語", desc: "送信先に合わせた敬語レベルを自動調整。上司・取引先・顧客それぞれに最適な表現を使用します。" },
+                { icon: "⚡", title: "10秒で完成", desc: "要点を箇条書きで入力するだけ。件名も本文もAIが瞬時に生成。メール作成の時間を90%削減。" },
+                { icon: "🌐", title: "日英対応", desc: "日本語・英語のビジネスメールに対応。海外とのやり取りもワンクリックで切り替えられます。" },
+                { icon: "✉️", title: "Gmail連携", desc: "生成したメールをGmailの下書きとしてワンクリックで開けます。コピペの手間も不要。" },
+                { icon: "💾", title: "テンプレート保存", desc: "よく使うメールパターンをテンプレートとして保存。次回から瞬時に呼び出せます。" },
+                { icon: "👤", title: "プロフィール設定", desc: "名前・会社名・署名を登録すると、生成メールに自動反映。毎回入力する手間がなくなります。" },
+              ].map((feature, i) => (
+                <div key={i} className="rounded-2xl border border-gray-200 p-6 transition-all hover:shadow-lg dark:border-gray-800">
+                  <div className="mb-4 text-4xl">{feature.icon}</div>
+                  <h3 className="mb-2 text-lg font-bold text-gray-900 dark:text-white">{feature.title}</h3>
+                  <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">{feature.desc}</p>
                 </div>
-              </div>
-
-              <EmailForm
-                recipient={recipient}
-                tone={tone}
-                keyPoints={keyPoints}
-                onRecipientChange={setRecipient}
-                onToneChange={setTone}
-                onKeyPointsChange={setKeyPoints}
-                onSubmit={handleGenerate}
-                isLoading={isLoading}
-                disabled={!scene}
-              />
-            </>
-          )}
-
-          {/* エラー表示 */}
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-              {error}
-            </div>
-          )}
-
-          {/* Step 3: 結果表示 */}
-          {result && (
-            <EmailResult
-              subject={result.subject}
-              body={result.body}
-              isMock={result.isMock}
-              onRegenerate={handleGenerate}
-              onSaveTemplate={handleSaveTemplate}
-              onOpenGmail={openGmailDraft}
-              isLoading={isLoading}
-              isLoggedIn={isLoggedIn}
-            />
-          )}
-        </div>
-
-        {/* Features Section */}
-        <div className="mt-16 mb-8">
-          <h2 className="mb-8 text-center text-2xl font-bold text-gray-900 dark:text-white">
-            BizMail AI が選ばれる理由
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-3">
-            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
-              <div className="mb-3 text-3xl">🎯</div>
-              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">適切な敬語</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                送信先に合わせた敬語レベルを自動調整。上司、取引先、顧客それぞれに最適な表現を使用。
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
-              <div className="mb-3 text-3xl">⚡</div>
-              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">10秒で完成</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                要点を箇条書きで入力するだけ。件名も本文もAIが瞬時に生成。メール作成の時間を90%削減。
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 p-6 text-center dark:border-gray-800">
-              <div className="mb-3 text-3xl">🌐</div>
-              <h3 className="mb-2 font-bold text-gray-900 dark:text-white">日英対応</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                日本語・英語のビジネスメールに対応。海外とのやり取りもワンクリックで切り替え。
-              </p>
+              ))}
             </div>
           </div>
-        </div>
+        </section>
 
         {/* How it works */}
-        <div className="mb-8 rounded-2xl bg-blue-50 p-8 dark:bg-blue-950/20">
-          <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
-            使い方は3ステップ
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-3">
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">1</div>
-              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">シーンを選ぶ</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">お礼・依頼・お詫びなど8つのシーンから選択</p>
+        <section className="bg-blue-50 px-4 py-16 dark:bg-blue-950/20">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-12 text-center text-3xl font-bold text-gray-900 dark:text-white">
+              使い方は3ステップ
+            </h2>
+            <div className="grid gap-8 sm:grid-cols-3">
+              {[
+                { step: "1", title: "シーンを選ぶ", desc: "お礼・依頼・お詫びなど8つのシーンから選択" },
+                { step: "2", title: "要点を入力", desc: "伝えたいポイントを箇条書きでOK" },
+                { step: "3", title: "コピー＆送信", desc: "生成されたメールをコピーまたはGmailで直接開く" },
+              ].map((item, i) => (
+                <div key={i} className="flex flex-col items-center text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-bold text-white shadow-lg">
+                    {item.step}
+                  </div>
+                  <h3 className="mb-2 text-lg font-bold text-gray-900 dark:text-white">{item.title}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{item.desc}</p>
+                </div>
+              ))}
             </div>
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">2</div>
-              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">要点を入力</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">伝えたいポイントを箇条書きでOK</p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">3</div>
-              <h3 className="mb-1 font-bold text-gray-900 dark:text-white">コピー＆送信</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">生成されたメールをコピーまたはGmailで直接開く</p>
+            <div className="mt-10 text-center">
+              <Link
+                href="/app"
+                className="inline-block rounded-xl bg-blue-600 px-8 py-4 text-lg font-bold text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl"
+              >
+                ✨ 無料でメールを作成する
+              </Link>
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* Supported scenes */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-8 text-center text-3xl font-bold text-gray-900 dark:text-white">
+              対応シーン
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {[
+                { icon: "🙏", label: "お礼" },
+                { icon: "📩", label: "依頼" },
+                { icon: "🙇", label: "お詫び" },
+                { icon: "⏰", label: "催促" },
+                { icon: "📊", label: "報告" },
+                { icon: "🚫", label: "断り" },
+                { icon: "👋", label: "挨拶" },
+                { icon: "❓", label: "問い合わせ" },
+              ].map((scene, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                  <span className="text-2xl">{scene.icon}</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{scene.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* FAQ */}
-        <div className="mb-8">
-          <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
-            よくある質問
-          </h2>
-          <div className="space-y-4">
-            {[
-              { q: "本当に無料で使えますか？", a: "はい、完全無料です。アカウント登録なしでもメール生成が可能です。アカウントを作成すると、テンプレート保存や生成履歴などの追加機能が使えます。" },
-              { q: "生成されたメールの品質は大丈夫ですか？", a: "最新のAI（GPT-4o-mini）を使用しており、ビジネスメールとして適切な敬語表現と構成で生成されます。送信前に内容をご確認いただくことをお勧めします。" },
-              { q: "入力した内容は保存されますか？", a: "ログインしていない場合、入力内容はサーバーに保存されません。ログインユーザーのみ、生成履歴が保存されます（いつでも削除可能）。" },
-              { q: "英語メールも作れますか？", a: "はい、日本語と英語の両方に対応しています。言語切替ボタンで簡単に切り替えられます。日本語で要点を入力しても、自然な英語メールが生成されます。" },
-            ].map((faq, i) => (
-              <details key={i} className="group rounded-xl border border-gray-200 dark:border-gray-800">
-                <summary className="flex cursor-pointer items-center justify-between p-4 font-medium text-gray-900 dark:text-white">
-                  {faq.q}
-                  <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
-                </summary>
-                <p className="border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
-                  {faq.a}
-                </p>
-              </details>
-            ))}
+        <section className="border-t border-gray-200 bg-gray-50 px-4 py-16 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-8 text-center text-3xl font-bold text-gray-900 dark:text-white">
+              よくある質問
+            </h2>
+            <div className="space-y-4">
+              {[
+                { q: "本当に無料で使えますか？", a: "はい、完全無料です。アカウント登録なしでもメール生成が可能です。アカウントを作成すると、テンプレート保存や生成履歴などの追加機能が使えます。" },
+                { q: "生成されたメールの品質は大丈夫ですか？", a: "最新のAI（GPT-4o-mini）を使用しており、ビジネスメールとして適切な敬語表現と構成で生成されます。送信前に内容をご確認いただくことをお勧めします。" },
+                { q: "入力した内容は保存されますか？", a: "ログインしていない場合、入力内容はサーバーに保存されません。ログインユーザーのみ、生成履歴が保存されます（いつでも削除可能）。" },
+                { q: "英語メールも作れますか？", a: "はい、日本語と英語の両方に対応しています。言語切替ボタンで簡単に切り替えられます。日本語で要点を入力しても、自然な英語メールが生成されます。" },
+              ].map((faq, i) => (
+                <details key={i} className="group rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                  <summary className="flex cursor-pointer items-center justify-between p-5 font-medium text-gray-900 dark:text-white">
+                    {faq.q}
+                    <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
+                  </summary>
+                  <p className="border-t border-gray-100 px-5 py-4 text-sm leading-relaxed text-gray-600 dark:border-gray-700 dark:text-gray-400">
+                    {faq.a}
+                  </p>
+                </details>
+              ))}
+            </div>
           </div>
-        </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="px-4 py-20 text-center">
+          <div className="mx-auto max-w-2xl">
+            <h2 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white">
+              もうメール作成で悩まない
+            </h2>
+            <p className="mb-8 text-lg text-gray-600 dark:text-gray-400">
+              今すぐBizMail AIを使って、プロ品質のビジネスメールを作成しましょう。
+            </p>
+            <Link
+              href="/app"
+              className="inline-block rounded-xl bg-blue-600 px-10 py-5 text-xl font-bold text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl"
+            >
+              ✨ 無料でメールを作成する
+            </Link>
+            <p className="mt-4 text-sm text-gray-400">登録不要 ・ クレジットカード不要</p>
+          </div>
+        </section>
       </main>
 
       <Footer />
-
-      {/* Modals */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={loadUserProfile}
-      />
-      <ProfileSettings
-        isOpen={showProfileSettings}
-        onClose={() => setShowProfileSettings(false)}
-        onSave={loadUserProfile}
-      />
-      <TemplateManager
-        isOpen={showTemplateManager}
-        onClose={() => setShowTemplateManager(false)}
-        onUseTemplate={handleUseTemplate}
-      />
-      <HistoryPanel
-        isOpen={showHistory}
-        onClose={() => setShowHistory(false)}
-        onReuse={handleReuseHistory}
-      />
     </div>
   );
 }
